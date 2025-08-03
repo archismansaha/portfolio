@@ -1,38 +1,104 @@
-.App {
-  text-align: center;
-}
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=DM+Sans:wght@400;500;600&family=Lora:ital,wght@0,400;0,500;1,400;1,500&display=swap');
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
+@layer base {
+  body {
+    @apply bg-dark text-softText font-body;
+    background: linear-gradient(135deg, #1E1E1E 0%, #006D77 100%);
+    min-height: 100vh;
   }
 }
 
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
+@layer components {
+  .glow-border {
+    @apply border-2 border-accent shadow-glow;
+  }
+  
+  .soft-card {
+    @apply bg-subtleGray rounded-xl p-6 shadow-soft border border-subtleGray/50;
+  }
+  
+  .flirt-text {
+    @apply text-accent italic font-poetry;
+  }
+  
+  .section-title {
+    @apply text-4xl md:text-5xl font-heading font-bold text-highlight mb-8 text-center;
+  }
+  
+  .dialogue-bubble {
+    @apply bg-subtleGray rounded-2xl p-4 text-softText max-w-sm shadow-soft border border-primary/20;
+  }
+  
+  .btn-primary {
+    @apply bg-gradient-accent text-dark font-bold px-8 py-4 rounded-xl shadow-glow hover:shadow-glow transition-all duration-300 transform hover:scale-105 font-heading;
+  }
+  
+  .btn-secondary {
+    @apply bg-primary/80 text-softText font-semibold px-6 py-3 rounded-lg shadow-soft hover:bg-primary hover:shadow-glow-primary transition-all duration-300;
+  }
+  
+  .card-interactive {
+    @apply bg-subtleGray rounded-xl p-6 shadow-soft border border-subtleGray/50 cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-glow hover:border-primary/50;
+  }
+  
+  .input-field {
+    @apply bg-dark rounded-lg p-3 w-full border border-subtleGray text-softText placeholder-softText/50 focus:outline-none focus:border-primary focus:shadow-glow-primary transition-all duration-300;
+  }
+  
+  .progress-bar {
+    @apply bg-dark rounded-full h-3 overflow-hidden;
+  }
+  
+  .progress-fill {
+    @apply h-full bg-gradient-primary shadow-glow transition-all duration-1000 ease-out;
+  }
 }
 
-.App-link {
-  color: #61dafb;
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #1E1E1E;
+}
+::-webkit-scrollbar-thumb {
+  background: #006D77;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #83C5BE;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+/* Floating animation for special elements */
+.float-animation {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Glow animation for interactive elements */
+.glow-animation {
+  animation: glow 2s ease-in-out infinite alternate;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #1E1E1E;
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #006D77, #83C5BE);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #83C5BE, #FFD166);
+}
+
+.parchment-texture {
+  background-image: url('data:image/svg+xml,%3Csvg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="%23ffffff" fill-opacity="0.1"%3E%3Cpath d="M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3z"/%3E%3C/g%3E%3C/svg%3E');
 }
