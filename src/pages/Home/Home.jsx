@@ -1,95 +1,97 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useGameContext } from '../../context/GameContext';
 import Avatar from '../../components/common/Avatar';
+import WelcomeTutorial from './welcomeTutorial';
+
 
 const Home = ({ onPageLoad }) => {
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [hasSeenTutorial, setHasSeenTutorial] = useState(false);
   const [showContent, setShowContent] = useState(false);
   const [currentPrompt, setCurrentPrompt] = useState(0);
   const [showXPToast, setShowXPToast] = useState(false);
   const [lastXPGain, setLastXPGain] = useState(0);
   const [userInteractions, setUserInteractions] = useState(0);
-  const [showSecretButton, setShowSecretButton] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showLevelUpModal, setShowLevelUpModal] = useState(false);
+  const [levelUpData, setLevelUpData] = useState(null);
+  const [currentTutorialStep, setCurrentTutorialStep] = useState(0);
+  const promptIntervalRef = useRef(null);
   const navigate = useNavigate();
   
-  const { visitPage, addXP, totalXP, currentLevel, unlockedZones } = useGameContext();
+  const { 
+    visitPage, 
+    addXP, 
+    totalXP, 
+    currentLevel, 
+    unlockedZones,
+    isZoneUnlocked 
+  } = useGameContext();
 
-  // 🎭 Dynamic prompts that change every few seconds
-  const prompts = [
+  // 🎯 Memoized data to prevent re-renders
+  const specialUnlocks = useMemo(() => ({
+    5: { zone: 'gym', title: 'Gym Arena', icon: '💪', description: 'Ready to see my fitness journey?' },
+    8: { zone: 'animeverse', title: 'Animeverse', icon: '🎌', description: 'Want to explore my anime world?' },
+    12: { zone: 'secretcrush', title: 'Secret Crush', icon: '💘', description: 'Ready for something special?' }
+  }), []);
+
+  const prompts = useMemo(() => [
     "Ready to explore my digital universe? 🌌",
     "Curious about the developer behind the code? 👨‍💻",
     "Want to see some epic projects and anime favorites? 🎌",
     "Interested in poetry that compiles feelings? 📝",
     "Ready to unlock the secrets of my portfolio? 🔓"
-  ];
-
-  // 🎯 Interactive XP activities with dynamic rewards
-  const xpActivities = [
-    { id: 'welcome', text: 'Welcome Explorer!', xp: 100, icon: '🎉' },
-    { id: 'curiosity', text: 'Curious Mind', xp: 50, icon: '🧠' },
-    { id: 'appreciation', text: 'Show Love', xp: 75, icon: '💕' },
-    { id: 'exploration', text: 'Digital Explorer', xp: 60, icon: '🔍' },
-    { id: 'passion', text: 'Passion Seeker', xp: 80, icon: '🔥' }
-  ];
+  ], []);
 
   useEffect(() => {
-    if (onPageLoad) onPageLoad();
+    const tutorialSeen = localStorage.getItem('hasSeenRPGTutorial');
+    const firstVisit = totalXP === 0 && !tutorialSeen;
     
-    // Initial XP for visiting
-    visitPage('home');
-    if (totalXP === 0) {
-      handleXPGain(150, 'First Visit Bonus! Welcome to my world! 🎊');
-    }
-    
-    setTimeout(() => setShowContent(true), 500);
-
-    // Cycling prompts
-    const promptInterval = setInterval(() => {
-      setCurrentPrompt(prev => (prev + 1) % prompts.length);
-    }, 3000);
-
-    // Show secret button after some interactions
-    if (userInteractions >= 3) {
-      setShowSecretButton(true);
-    }
-
-    return () => clearInterval(promptInterval);
-  }, [onPageLoad, visitPage, totalXP, userInteractions]);
-
-  // 🎊 XP gain with visual feedback
-  const handleXPGain = (xp, message) => {
-    addXP(xp, message);
-    setLastXPGain(xp);
-    setShowXPToast(true);
-    setUserInteractions(prev => prev + 1);
-    
-    setTimeout(() => setShowXPToast(false), 2000);
-  };
-
-  // 🚀 Enhanced quest start
-  const handleBeginQuest = () => {
-    handleXPGain(100, 'Quest Started! Adventure begins! 🗺️');
-    
-    // Check what zones are unlocked and navigate accordingly
-    if (unlockedZones.includes('about')) {
-      navigate('/about');
+    if (firstVisit) {
+      setShowTutorial(true);
     } else {
-      // Show encouragement to gain more XP
-      setTimeout(() => {
-        handleXPGain(25, 'Keep exploring to unlock new zones! 🔓');
-      }, 1000);
+      setHasSeenTutorial(true);
     }
+
+    if (onPageLoad) onPageLoad();
+    visitPage('home');
+  }, [onPageLoad, visitPage, totalXP]);
+
+  const handleTutorialComplete = () => {
+    setShowTutorial(false);
+    setHasSeenTutorial(true);
+    localStorage.setItem('hasSeenRPGTutorial', 'true');
+    addXP(150, '🎓 Tutorial completed! Welcome bonus!');
   };
 
-  // 🎲 Random XP rewards
-  const handleRandomReward = () => {
-    const randomActivity = xpActivities[Math.floor(Math.random() * xpActivities.length)];
-    handleXPGain(randomActivity.xp, `${randomActivity.icon} ${randomActivity.text}!`);
+  const handleTutorialSkip = () => {
+    setShowTutorial(false);
+    setHasSeenTutorial(true);
+    localStorage.setItem('hasSeenRPGTutorial', 'true');
+    addXP(50, 'Welcome to the adventure!');
   };
 
-  // 🎯 Responsive stats with interactions
-  const statsData = [
+  const tutorialSteps = useMemo(() => [
+    {
+      title: "Welcome to My RPG Portfolio! 🎮",
+      message: "This isn't just a portfolio - it's an interactive experience where you earn XP by exploring!",
+      highlight: "Click on ANYTHING that looks interactive!"
+    },
+    {
+      title: "Earn XP & Level Up! ⭐",
+      message: "Every click, every interaction gives you XP. The more you explore, the more you unlock!",
+      highlight: "Try clicking the stats below to earn your first XP!"
+    },
+    {
+      title: "Unlock Secret Areas! 🔓",
+      message: "At Level 5: Gym Arena 💪\nAt Level 8: Animeverse 🎌\nAt Level 12: Secret Crush 💘",
+      highlight: "Each level unlocks exclusive content!"
+    }
+  ], []);
+
+  const statsData = useMemo(() => [
     { 
       value: '2+', 
       label: 'Years Experience', 
@@ -111,37 +113,333 @@ const Home = ({ onPageLoad }) => {
       xp: 100,
       message: 'Passion Discovered! Infinite energy unlocked! 🔥'
     }
-  ];
+  ], []);
+
+  // 🎊 Optimized XP gain handler
+  const handleXPGain = useCallback((xp, message) => {
+    const oldLevel = currentLevel;
+    addXP(xp, message);
+    setLastXPGain(xp);
+    setShowXPToast(true);
+    setUserInteractions(prev => prev + 1);
+    
+    const toastTimer = setTimeout(() => setShowXPToast(false), 2000);
+
+    // Check for level up
+    const newLevel = Math.floor((totalXP + xp) / 1000) + 1;
+    if (newLevel > oldLevel) {
+      setTimeout(() => {
+        setLevelUpData({ 
+          level: newLevel, 
+          title: `Level ${newLevel} Achieved!`,
+          icon: '🎉',
+          description: `You're getting stronger, explorer!`
+        });
+        setShowLevelUpModal(true);
+      }, 1500);
+    }
+
+    return () => clearTimeout(toastTimer);
+  }, [currentLevel, addXP, totalXP]);
+
+  // 🔓 Check for special unlocks
+  const checkForSpecialUnlocks = useCallback(() => {
+    Object.entries(specialUnlocks).forEach(([level, unlock]) => {
+      if (currentLevel >= parseInt(level) && !isZoneUnlocked(unlock.zone)) {
+        setLevelUpData(unlock);
+        setShowLevelUpModal(true);
+      }
+    });
+  }, [currentLevel, specialUnlocks, isZoneUnlocked]);
+
+  // 🎯 Tutorial handlers
+  const nextTutorialStep = useCallback(() => {
+    if (currentTutorialStep < tutorialSteps.length - 1) {
+      setCurrentTutorialStep(prev => prev + 1);
+    } else {
+      setShowOnboarding(false);
+      localStorage.setItem('hasSeenRPGTutorial', 'true');
+      handleXPGain(100, '🎓 Tutorial completed! You\'re ready to explore!');
+    }
+  }, [currentTutorialStep, tutorialSteps.length, handleXPGain]);
+
+  const skipTutorial = useCallback(() => {
+    setShowOnboarding(false);
+    localStorage.setItem('hasSeenRPGTutorial', 'true');
+  }, []);
+
+  // 🚀 Enhanced quest start
+  const handleBeginQuest = useCallback(() => {
+    handleXPGain(100, 'Quest Started! Adventure begins! 🗺️');
+    
+    if (isZoneUnlocked('about')) {
+      navigate('/about');
+    } else {
+      setTimeout(() => {
+        handleXPGain(25, 'Keep exploring to unlock new zones! 🔓');
+      }, 1000);
+    }
+  }, [handleXPGain, isZoneUnlocked, navigate]);
+
+  // 🎯 Navigate to special areas
+  const navigateToSpecialArea = useCallback((zone) => {
+    setShowLevelUpModal(false);
+    navigate(`/${zone === 'secretcrush' ? 'secret-crush' : zone}`);
+  }, [navigate]);
+
+  // 🎲 Random XP rewards
+  const handleRandomReward = useCallback(() => {
+    const xpActivities = [
+      { id: 'welcome', text: 'Welcome Explorer!', xp: 100, icon: '🎉' },
+      { id: 'curiosity', text: 'Curious Mind', xp: 50, icon: '🧠' },
+      { id: 'appreciation', text: 'Show Love', xp: 75, icon: '💕' },
+      { id: 'exploration', text: 'Digital Explorer', xp: 60, icon: '🔍' },
+      { id: 'passion', text: 'Passion Seeker', xp: 80, icon: '🔥' }
+    ];
+    const randomActivity = xpActivities[Math.floor(Math.random() * xpActivities.length)];
+    handleXPGain(randomActivity.xp, `${randomActivity.icon} ${randomActivity.text}!`);
+  }, [handleXPGain]);
+
+  // 🎮 Optimized initialization
+  useEffect(() => {
+    if (onPageLoad) onPageLoad();
+    
+    const hasSeenTutorial = localStorage.getItem('hasSeenRPGTutorial');
+    if (!hasSeenTutorial && totalXP === 0) {
+      const timer = setTimeout(() => setShowOnboarding(true), 1500);
+      return () => clearTimeout(timer);
+    }
+    
+    visitPage('home');
+    if (totalXP === 0) {
+      handleXPGain(150, 'First Visit Bonus! Welcome to my world! 🎊');
+    }
+    
+    const contentTimer = setTimeout(() => setShowContent(true), 500);
+    checkForSpecialUnlocks();
+    
+    return () => clearTimeout(contentTimer);
+  }, [onPageLoad, visitPage, totalXP, handleXPGain, checkForSpecialUnlocks]);
+
+  // 🔄 Optimized prompt cycling
+  useEffect(() => {
+    promptIntervalRef.current = setInterval(() => {
+      setCurrentPrompt(prev => (prev + 1) % prompts.length);
+    }, 3000);
+
+    return () => {
+      if (promptIntervalRef.current) {
+        clearInterval(promptIntervalRef.current);
+      }
+    };
+  }, [prompts.length]);
+
+  // 🎯 Memoized floating elements to prevent re-renders
+  const FloatingElements = useMemo(() => (
+    <div className="absolute inset-0 pointer-events-none">
+      {[...Array(15)].map((_, i) => ( // Reduced from 20 to 15 for performance
+        <motion.div
+          key={i}
+          className="absolute text-primary/20"
+          animate={{
+            y: [-20, -60, -20],
+            x: [0, Math.sin(i) * 50, 0],
+            rotate: [0, 360],
+            opacity: [0.1, 0.3, 0.1]
+          }}
+          transition={{
+            duration: 8 + i * 0.5,
+            repeat: Infinity,
+            delay: i * 0.3
+          }}
+          style={{
+            left: `${Math.random() * 100}%`,
+            top: `${Math.random() * 100}%`,
+            fontSize: '2rem'
+          }}
+        >
+          {['⚡', '💻', '🚀', '⭐', '🎯', '💫'][i % 6]}
+        </motion.div>
+      ))}
+    </div>
+  ), []);
+
+  // 🎯 Next unlock calculation
+  const nextUnlock = useMemo(() => {
+    return Object.entries(specialUnlocks).find(([level]) => currentLevel < parseInt(level));
+  }, [currentLevel, specialUnlocks]);
 
   return (
     <div className="min-h-screen bg-gradient-dark-teal flex items-center justify-center overflow-x-hidden relative px-4 sm:px-6 lg:px-8 py-8 sm:py-12 lg:py-16">
-      {/* Floating Background Elements */}
-      <div className="absolute inset-0 pointer-events-none">
-        {[...Array(20)].map((_, i) => (
+         <AnimatePresence>
+        {showTutorial && (
+          <WelcomeTutorial
+            onComplete={handleTutorialComplete}
+            onSkip={handleTutorialSkip}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Help button for returning users */}
+      {hasSeenTutorial && (
+        <motion.button
+          onClick={() => setShowTutorial(true)}
+          className="fixed top-4 left-4 bg-primary/80 hover:bg-primary text-softText p-3 rounded-full shadow-lg z-40 transition-all duration-300"
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+        >
+          <span className="text-xl">❓</span>
+        </motion.button>
+      )} {/* 🎓 Tutorial Modal */}
+      <AnimatePresence>
+        {showOnboarding && (
           <motion.div
-            key={i}
-            className="absolute text-primary/20"
-            animate={{
-              y: [-20, -60, -20],
-              x: [0, Math.sin(i) * 50, 0],
-              rotate: [0, 360],
-              opacity: [0.1, 0.3, 0.1]
-            }}
-            transition={{
-              duration: 8 + i * 0.5,
-              repeat: Infinity,
-              delay: i * 0.3
-            }}
-            style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              fontSize: window.innerWidth < 768 ? '1.5rem' : '2rem'
-            }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-dark/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
           >
-            {['⚡', '💻', '🚀', '⭐', '🎯', '💫'][i % 6]}
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              className="bg-gradient-to-br from-primary to-highlight text-white rounded-2xl p-8 max-w-2xl w-full border-4 border-accent shadow-glow"
+            >
+              <div className="text-center mb-6">
+                <div className="text-6xl mb-4">🎮</div>
+                <h2 className="text-3xl font-heading font-bold mb-2">
+                  {tutorialSteps[currentTutorialStep].title}
+                </h2>
+              </div>
+
+              <div className="space-y-4 mb-6">
+                <p className="text-lg leading-relaxed">
+                  {tutorialSteps[currentTutorialStep].message}
+                </p>
+                <div className="bg-accent/20 rounded-lg p-4 border-2 border-accent">
+                  <p className="text-accent font-bold text-center">
+                    💡 {tutorialSteps[currentTutorialStep].highlight}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex justify-center mb-6">
+                {tutorialSteps.map((_, index) => (
+                  <div
+                    key={index}
+                    className={`w-3 h-3 rounded-full mx-1 ${
+                      index === currentTutorialStep ? 'bg-accent' : 'bg-white/30'
+                    }`}
+                  />
+                ))}
+              </div>
+
+              <div className="flex justify-between">
+                <button
+                  onClick={skipTutorial}
+                  className="px-4 py-2 text-white/80 hover:text-white transition-colors"
+                >
+                  Skip Tutorial
+                </button>
+                <button
+                  onClick={nextTutorialStep}
+                  className="bg-accent hover:bg-accent/80 text-dark font-bold px-6 py-3 rounded-lg transition-all duration-300 transform hover:scale-105"
+                >
+                  {currentTutorialStep === tutorialSteps.length - 1 ? 'Start Playing!' : 'Next →'}
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
-        ))}
-      </div>
+        )}
+      </AnimatePresence>
+
+      {/* 🎉 Level Up Modal */}
+      <AnimatePresence>
+        {showLevelUpModal && levelUpData && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-dark/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.5, opacity: 0, rotateY: -180 }}
+              animate={{ scale: 1, opacity: 1, rotateY: 0 }}
+              exit={{ scale: 0.5, opacity: 0, rotateY: 180 }}
+              className="bg-gradient-to-br from-accent to-primary text-dark rounded-2xl p-8 max-w-lg w-full border-4 border-white shadow-glow text-center"
+            >
+              <motion.div
+                animate={{ 
+                  scale: [1, 1.2, 1],
+                  rotate: [0, 360]
+                }}
+                transition={{ duration: 1, ease: "easeInOut" }}
+                className="text-8xl mb-4"
+              >
+                {levelUpData.icon}
+              </motion.div>
+              
+              <h2 className="text-4xl font-heading font-bold mb-4">
+                {levelUpData.title}
+              </h2>
+              
+              <p className="text-lg mb-6 leading-relaxed">
+                {levelUpData.description}
+              </p>
+
+              {levelUpData.zone && (
+                <div className="space-y-4">
+                  <div className="bg-white/20 rounded-lg p-4 mb-4">
+                    <p className="font-bold text-lg">🎊 New Area Unlocked!</p>
+                    <p>You can now access exclusive content!</p>
+                  </div>
+                  
+                  <div className="flex gap-4 justify-center">
+                    <button
+                      onClick={() => navigateToSpecialArea(levelUpData.zone)}
+                      className="bg-dark hover:bg-dark/80 text-accent font-bold px-6 py-3 rounded-lg transition-all duration-300 transform hover:scale-105"
+                    >
+                      Explore Now! 🚀
+                    </button>
+                    <button
+                      onClick={() => setShowLevelUpModal(false)}
+                      className="bg-white/20 hover:bg-white/30 text-dark font-bold px-6 py-3 rounded-lg transition-all duration-300"
+                    >
+                      Maybe Later
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!levelUpData.zone && (
+                <button
+                  onClick={() => setShowLevelUpModal(false)}
+                  className="bg-dark hover:bg-dark/80 text-accent font-bold px-6 py-3 rounded-lg transition-all duration-300 transform hover:scale-105"
+                >
+                  Continue! 🎉
+                </button>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 🎯 Tutorial Hint for New Users */}
+      {!localStorage.getItem('hasSeenRPGTutorial') && totalXP > 0 && totalXP < 300 && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="fixed top-20 left-4 md:left-8 z-40 bg-primary/90 text-softText px-4 py-2 rounded-lg shadow-soft max-w-xs"
+        >
+          <p className="text-sm font-bold">💡 Keep clicking interactive elements to earn XP!</p>
+          <div className="text-xs text-softText/80 mt-1">
+            Next unlock at Level {Object.keys(specialUnlocks)[0]} ⭐
+          </div>
+        </motion.div>
+      )}
+
+      {/* Optimized Floating Elements */}
+      {FloatingElements}
 
       {/* XP Toast Notification */}
       <AnimatePresence>
@@ -158,6 +456,7 @@ const Home = ({ onPageLoad }) => {
       </AnimatePresence>
 
       <div className="text-center space-y-4 sm:space-y-6 lg:space-y-8 max-w-4xl mx-auto w-full relative z-10 pt-16 sm:pt-8 pb-8">
+        {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -50 }}
           animate={{ opacity: 1, y: 0 }}
@@ -170,7 +469,7 @@ const Home = ({ onPageLoad }) => {
           <motion.div
             className="w-12 sm:w-20 lg:w-28 h-0.5 sm:h-1 bg-gradient-accent mx-auto rounded-full mb-3 sm:mb-4 lg:mb-6"
             initial={{ width: 0 }}
-            animate={{ width: window.innerWidth < 640 ? 48 : window.innerWidth < 1024 ? 80 : 112 }}
+            animate={{ width: '100%' }}
             transition={{ delay: 0.5, duration: 1 }}
           />
 
@@ -188,6 +487,7 @@ const Home = ({ onPageLoad }) => {
           </AnimatePresence>
         </motion.div>
 
+        {/* Subtitle */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: showContent ? 1 : 0, y: showContent ? 0 : 30 }}
@@ -204,6 +504,7 @@ const Home = ({ onPageLoad }) => {
           </p>
         </motion.div>
 
+        {/* Begin Quest Button */}
         <motion.div
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: showContent ? 1 : 0, scale: showContent ? 1 : 0.8 }}
@@ -216,12 +517,7 @@ const Home = ({ onPageLoad }) => {
             whileHover={{ scale: 1.05, rotate: 1 }}
             whileTap={{ scale: 0.95 }}
           >
-            <motion.span
-              animate={{ x: [-5, 5, -5] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            >
-              Begin Quest 🚀
-            </motion.span>
+            Begin Quest 🚀
           </motion.button>
           
           <div className="text-softText/60 text-xs sm:text-sm font-poetry italic px-4 break-words">
@@ -229,7 +525,7 @@ const Home = ({ onPageLoad }) => {
           </div>
         </motion.div>
 
-        {/* Interactive Stats Grid */}
+        {/* Enhanced Interactive Stats with Clear XP Hints */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: showContent ? 1 : 0, y: showContent ? 0 : 30 }}
@@ -239,31 +535,53 @@ const Home = ({ onPageLoad }) => {
           {statsData.map((stat, index) => (
             <motion.div 
               key={index}
-              className="text-center cursor-pointer p-2 sm:p-3 lg:p-4 rounded-lg hover:bg-dark/20 transition-all duration-300 group"
+              className="bg-dark/30 backdrop-blur-sm rounded-xl p-3 sm:p-4 border-2 border-primary/30 cursor-pointer group relative overflow-hidden"
               onClick={() => handleXPGain(stat.xp, stat.message)}
               whileHover={{ scale: 1.05, y: -5 }}
               whileTap={{ scale: 0.95 }}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.7 + index * 0.1 }}
             >
+              {/* Animated XP Hint */}
+              <motion.div
+                animate={{ 
+                  opacity: [0, 1, 0],
+                  y: [-5, -15, -5]
+                }}
+                transition={{ 
+                  duration: 2, 
+                  repeat: Infinity,
+                  delay: index * 0.5
+                }}
+                className="absolute top-1 right-1 text-accent text-xs font-bold pointer-events-none"
+              >
+                +{stat.xp}
+              </motion.div>
+              
               <div className="text-xl sm:text-2xl lg:text-3xl mb-1 sm:mb-2 group-hover:animate-bounce">
                 {stat.emoji}
               </div>
               <div className="text-lg sm:text-xl lg:text-2xl font-bold text-accent">{stat.value}</div>
               <div className="text-xs sm:text-sm text-highlight leading-tight">{stat.label}</div>
-              <div className="text-xs text-accent/60 mt-1 sm:mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                Click for +{stat.xp} XP
+              <div className="text-xs text-accent/80 mt-1 sm:mt-2 group-hover:opacity-100 opacity-60 transition-opacity font-bold animate-pulse">
+                Click for XP!
               </div>
+
+              {/* Glow effect */}
+              <div className="absolute inset-0 bg-gradient-to-r from-accent/10 to-primary/10 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl" />
             </motion.div>
           ))}
         </motion.div>
 
-        {/* Current Progress Display */}
+        {/* Enhanced Progress Display with Next Unlock Info */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 2 }}
-          className="mt-4 sm:mt-6"
+          className="mt-4 sm:mt-6 space-y-4"
         >
-          <div className="bg-dark/30 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-accent/30 max-w-xs sm:max-w-md mx-auto">
+          <div className="bg-dark/50 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-accent/30 max-w-md mx-auto">
             <div className="flex justify-between items-center mb-2 sm:mb-3">
               <span className="text-accent font-bold text-lg sm:text-xl">Level {currentLevel}</span>
               <span className="text-highlight font-bold text-lg sm:text-xl">{totalXP.toLocaleString()} XP</span>
@@ -281,6 +599,20 @@ const Home = ({ onPageLoad }) => {
               {1000 - (totalXP % 1000)} XP to next level
             </div>
           </div>
+
+          {/* Next Unlock Preview */}
+          {nextUnlock && (
+            <div className="bg-gradient-to-r from-primary/20 to-highlight/20 rounded-xl p-4 border border-accent/30 max-w-md mx-auto">
+              <div className="text-accent font-bold text-sm mb-2">🎯 Next Unlock:</div>
+              <div className="flex items-center space-x-3">
+                <span className="text-2xl">{nextUnlock[1].icon}</span>
+                <div>
+                  <div className="text-softText font-semibold">{nextUnlock[1].title}</div>
+                  <div className="text-softText/70 text-xs">Level {nextUnlock[0]} required</div>
+                </div>
+              </div>
+            </div>
+          )}
         </motion.div>
 
         {/* Interactive Action Buttons */}
@@ -296,7 +628,7 @@ const Home = ({ onPageLoad }) => {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
-            🔍 Explore
+            🔍 Explore (+60)
           </motion.button>
           
           <motion.button
@@ -305,7 +637,7 @@ const Home = ({ onPageLoad }) => {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
-            💝 Love
+            💝 Love (+75)
           </motion.button>
 
           <motion.button
@@ -314,12 +646,12 @@ const Home = ({ onPageLoad }) => {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
-            🎲 Surprise
+            🎲 Surprise (?)
           </motion.button>
 
-          {/* Secret Button */}
+          {/* Secret Button after 3 interactions */}
           <AnimatePresence>
-            {showSecretButton && (
+            {userInteractions >= 3 && (
               <motion.button
                 initial={{ opacity: 0, scale: 0 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -331,7 +663,7 @@ const Home = ({ onPageLoad }) => {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
-                🔮 Secret
+                🔮 Secret (+200)
               </motion.button>
             )}
           </AnimatePresence>
@@ -350,6 +682,7 @@ const Home = ({ onPageLoad }) => {
         </motion.div>
       </div>
 
+      {/* Enhanced Avatar */}
       <Avatar
         currentLevel={currentLevel}
         currentXP={totalXP}
@@ -357,7 +690,7 @@ const Home = ({ onPageLoad }) => {
         mood="welcoming"
         messages={[
           `Welcome! You've earned ${totalXP} XP so far! Level ${currentLevel} achieved! 🌟`,
-          "Every click brings magic to our connection! ✨",
+          "Click on anything that glows or moves to earn XP! ✨",
           `${userInteractions} interactions and counting! You're awesome! 💫`,
           "Ready to unlock more zones? Keep exploring! 🚀"
         ]}

@@ -1,174 +1,248 @@
-// src/components/common/Avatar/Avatar.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameContext } from '../../../context/GameContext';
 
-const Avatar = ({ mood = "helpful", messages = [] }) => {
-  const { totalXP, currentLevel, getProgressPercentage } = useGameContext();
+const Avatar = ({ 
+  currentLevel = 1, 
+  currentXP = 0, 
+  visitedPages = [], 
+  mood = "helpful", 
+  messages = [] 
+}) => {
   const [currentMessage, setCurrentMessage] = useState(null);
   const [showDialogue, setShowDialogue] = useState(false);
   const [avatarState, setAvatarState] = useState('idle');
   const [messageIndex, setMessageIndex] = useState(0);
+  const [isMinimized, setIsMinimized] = useState(false);
+  
+  // 🎯 Key UX improvements: Control popup behavior
+  const [lastPopupTime, setLastPopupTime] = useState(0);
+  const [userDismissedCount, setUserDismissedCount] = useState(0);
+  const [hasUserInteracted, setHasUserInteracted] = useState(false);
+  const cooldownTimeRef = useRef(30000); // 30 seconds cooldown
+  const hoverTimeoutRef = useRef(null);
+  const messageTimeoutRef = useRef(null);
 
-  // Avatar evolution based on level and XP
-  const getAvatarAppearance = () => {
-    if (currentLevel >= 15) return 'legendary';
-    if (currentLevel >= 10) return 'elite';
-    if (currentLevel >= 5) return 'advanced';
-    return 'beginner';
-  };
+  const { totalXP, getProgressPercentage } = useGameContext();
 
-  // Level-based personality messages
-  const getLevelMessages = () => {
-    const levelMessages = {
-      1: ["Welcome to my world! Let's start this journey! 🚀"],
-      5: ["You're getting the hang of this! Keep exploring! 💪"],
-      10: ["Impressive progress! You've unlocked elite status! ⭐"],
-      15: ["Legendary explorer! You know me better than most! 👑"],
-      20: ["Max level achieved! You're part of my inner circle! 💕"]
+  // 🎨 Enhanced avatar appearance based on level and XP
+  const getAvatarAppearance = useCallback(() => {
+    if (currentLevel >= 20) return {
+      gradient: 'from-yellow-400 via-orange-500 to-red-500',
+      glow: 'shadow-yellow-400/50',
+      ring: 'ring-4 ring-yellow-400/30',
+      icon: '👑',
+      title: 'Legendary'
     };
+    if (currentLevel >= 15) return {
+      gradient: 'from-purple-500 to-pink-500',
+      glow: 'shadow-purple-400/50', 
+      ring: 'ring-4 ring-purple-400/30',
+      icon: '⚡',
+      title: 'Elite'
+    };
+    if (currentLevel >= 10) return {
+      gradient: 'from-blue-500 to-cyan-500',
+      glow: 'shadow-blue-400/50',
+      ring: 'ring-4 ring-blue-400/30', 
+      icon: '🦾',
+      title: 'Advanced'
+    };
+    if (currentLevel >= 5) return {
+      gradient: 'from-green-500 to-blue-500',
+      glow: 'shadow-green-400/50',
+      ring: 'ring-4 ring-green-400/30',
+      icon: '🚀',
+      title: 'Skilled'
+    };
+    return {
+      gradient: 'from-primary to-highlight',
+      glow: 'shadow-primary/50',
+      ring: 'ring-2 ring-primary/30',
+      icon: '👨‍💻',
+      title: 'Beginner'
+    };
+  }, [currentLevel]);
 
-    // Return milestone message if just reached a new level milestone
-    const milestones = [1, 5, 10, 15, 20];
-    const milestone = milestones.find(m => currentLevel >= m);
-    return milestone ? levelMessages[milestone] : [];
-  };
+  // 🎯 Smart popup control - prevents annoying repeated popups
+  const shouldShowPopup = useCallback(() => {
+    const now = Date.now();
+    const timeSinceLastPopup = now - lastPopupTime;
+    
+    // Don't show if user dismissed multiple times recently
+    if (userDismissedCount >= 3) return false;
+    
+    // Respect cooldown period
+    if (timeSinceLastPopup < cooldownTimeRef.current) return false;
+    
+    // Show on first interaction or after cooldown
+    return !hasUserInteracted || timeSinceLastPopup >= cooldownTimeRef.current;
+  }, [lastPopupTime, userDismissedCount, hasUserInteracted]);
 
-  // XP-based reactions
-  const getXPReactions = () => {
-    if (totalXP >= 5000) return ["Your dedication is legendary! 🏆"];
-    if (totalXP >= 3000) return ["Wow, you're really committed to knowing me! 😍"];
-    if (totalXP >= 2000) return ["This much XP? You're definitely special! 💖"];
-    if (totalXP >= 1000) return ["1000+ XP! We're becoming best friends! 🤝"];
-    return ["Every point of XP brings us closer! 😊"];
-  };
-
-  // Combine all message types
-  const getAllMessages = () => {
-    const levelMsgs = getLevelMessages();
-    const xpMsgs = getXPReactions();
-    const defaultMsgs = messages.length > 0 ? messages : [
+  // 🎭 Get contextual messages based on user progress
+  const getContextualMessages = useCallback(() => {
+    const baseMessages = messages.length > 0 ? messages : [
       "Thanks for exploring my portfolio! 🎮",
       "Your progress is being saved automatically! 💾",
       "Keep unlocking zones to learn more about me! 🔓"
     ];
 
-    return [...levelMsgs, ...xpMsgs, ...defaultMsgs];
-  };
+    const levelMessages = {
+      1: ["Welcome to my world! Let's start this journey! 🚀"],
+      5: ["You're getting the hang of this! Keep exploring! 💪"],
+      10: ["Impressive progress! You've unlocked advanced status! ⭐"],
+      15: ["Elite explorer! You know me better than most! 👑"],
+      20: ["Max level achieved! You're part of my inner circle! 💕"]
+    };
 
-  // Cycle through messages
+    const progressMessages = [];
+    if (totalXP >= 5000) progressMessages.push("Your dedication is legendary! 🏆");
+    if (totalXP >= 2000) progressMessages.push("Wow, you're really committed to knowing me! 😍");
+    if (visitedPages.length >= 5) progressMessages.push("You've explored so many areas! 🗺️");
+
+    return [...(levelMessages[currentLevel] || []), ...progressMessages, ...baseMessages];
+  }, [messages, currentLevel, totalXP, visitedPages]);
+
+  // 🎨 Handle mouse enter with smart popup logic
+  const handleMouseEnter = useCallback(() => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+
+    // Only show popup if conditions are met
+    if (shouldShowPopup() && !showDialogue && !isMinimized) {
+      hoverTimeoutRef.current = setTimeout(() => {
+        const contextualMessages = getContextualMessages();
+        setCurrentMessage(contextualMessages[messageIndex % contextualMessages.length]);
+        setShowDialogue(true);
+        setAvatarState('talking');
+        setLastPopupTime(Date.now());
+        setHasUserInteracted(true);
+
+        // Auto-hide after 4 seconds
+        messageTimeoutRef.current = setTimeout(() => {
+          setShowDialogue(false);
+          setAvatarState('idle');
+        }, 4000);
+      }, 800); // Small delay to prevent accidental triggers
+    }
+  }, [shouldShowPopup, showDialogue, isMinimized, getContextualMessages, messageIndex]);
+
+  // 🎯 Handle mouse leave
+  const handleMouseLeave = useCallback(() => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+  }, []);
+
+  // 🎮 Handle direct avatar click
+  const handleAvatarClick = useCallback(() => {
+    if (isMinimized) {
+      setIsMinimized(false);
+      return;
+    }
+
+    const contextualMessages = getContextualMessages();
+    setCurrentMessage(contextualMessages[messageIndex % contextualMessages.length]);
+    setShowDialogue(!showDialogue);
+    setAvatarState(showDialogue ? 'idle' : 'talking');
+    setMessageIndex(prev => prev + 1);
+    setHasUserInteracted(true);
+  }, [isMinimized, getContextualMessages, messageIndex, showDialogue]);
+
+  // 🚫 Handle user dismissal
+  const handleDismiss = useCallback(() => {
+    setShowDialogue(false);
+    setAvatarState('idle');
+    setUserDismissedCount(prev => prev + 1);
+    
+    // Increase cooldown time after dismissals
+    cooldownTimeRef.current = Math.min(cooldownTimeRef.current * 1.5, 300000); // Max 5 minutes
+  }, []);
+
+  // 🔄 Cleanup timeouts
   useEffect(() => {
-    const allMessages = getAllMessages();
-    
-    const showMessage = () => {
-      setCurrentMessage(allMessages[messageIndex % allMessages.length]);
-      setShowDialogue(true);
-      setAvatarState('talking');
-      
-      setTimeout(() => {
-        setShowDialogue(false);
-        setAvatarState('idle');
-      }, 4000);
-      
-      setMessageIndex(prev => prev + 1);
-    };
-
-    const initialTimer = setTimeout(showMessage, 2000);
-    const intervalTimer = setInterval(showMessage, 8000);
-
     return () => {
-      clearTimeout(initialTimer);
-      clearInterval(intervalTimer);
+      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+      if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current);
     };
-  }, [mood, currentLevel, totalXP, messageIndex, messages]);
+  }, []);
 
-  // Avatar styling based on level
-  const getAvatarStyles = () => {
-    const appearance = getAvatarAppearance();
-    
-    const styles = {
-      beginner: {
-        bg: 'from-blue-400 to-purple-500',
-        border: 'border-blue-300',
-        glow: 'shadow-blue-400/50',
-        icon: '👨‍💻'
-      },
-      advanced: {
-        bg: 'from-purple-500 to-pink-500', 
-        border: 'border-purple-300',
-        glow: 'shadow-purple-400/50',
-        icon: '🦾'
-      },
-      elite: {
-        bg: 'from-pink-500 to-red-500',
-        border: 'border-pink-300', 
-        glow: 'shadow-pink-400/50',
-        icon: '⚡'
-      },
-      legendary: {
-        bg: 'from-yellow-400 via-orange-500 to-red-500',
-        border: 'border-yellow-300',
-        glow: 'shadow-yellow-400/50', 
-        icon: '👑'
-      }
-    };
+  const appearance = getAvatarAppearance();
 
-    return styles[appearance];
-  };
-
-  const avatarStyle = getAvatarStyles();
+  if (isMinimized) {
+    return (
+      <motion.div
+        className="fixed bottom-6 right-6 z-50"
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        whileHover={{ scale: 1.05 }}
+      >
+        <button
+          onClick={handleAvatarClick}
+          className="w-12 h-12 rounded-full bg-gradient-to-r from-primary to-highlight shadow-lg border-2 border-accent flex items-center justify-center text-2xl"
+        >
+          💬
+        </button>
+      </motion.div>
+    );
+  }
 
   return (
     <div className="fixed bottom-6 right-6 z-50">
-      {/* Dialogue Box */}
+      {/* 💬 Enhanced Dialogue Box */}
       <AnimatePresence>
         {showDialogue && currentMessage && (
           <motion.div
             initial={{ opacity: 0, x: 50, y: 20 }}
             animate={{ opacity: 1, x: 0, y: 0 }}
             exit={{ opacity: 0, x: 50, y: 20 }}
-            transition={{ duration: 0.3 }}
-            className="absolute bottom-20 right-2 z-10"
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            className="absolute bottom-24 right-0 z-10 max-w-xs"
           >
-            <div className={`
-              relative max-w-xs bg-gradient-to-br ${avatarStyle.bg} text-white 
-              px-4 py-3 rounded-2xl shadow-xl border-2 ${avatarStyle.border}
-              backdrop-blur-sm
-            `}>
+            <div className={`relative bg-gradient-to-br ${appearance.gradient} text-white px-4 py-3 rounded-2xl shadow-xl border-2 border-white/20 backdrop-blur-sm`}>
+              {/* Close button */}
               <button
-                onClick={() => setShowDialogue(false)}
-                className="absolute top-1 right-2 text-white/70 hover:text-white text-sm"
+                onClick={handleDismiss}
+                className="absolute top-1 right-2 text-white/70 hover:text-white text-lg leading-none"
+                aria-label="Close message"
               >
                 ×
               </button>
               
-              <p className="text-sm leading-relaxed pr-4">
+              <p className="text-sm leading-relaxed pr-6 mb-2">
                 {currentMessage}
               </p>
               
-              {/* XP and Level Display */}
-              <div className="text-xs text-white/80 mt-2 border-t border-white/20 pt-2">
-                Level {currentLevel} • {totalXP} XP • {getProgressPercentage()}% Complete
+              {/* Progress info */}
+              <div className="text-xs text-white/80 border-t border-white/20 pt-2">
+                <div className="flex justify-between">
+                  <span>Level {currentLevel}</span>
+                  <span>{totalXP.toLocaleString()} XP</span>
+                </div>
+                <div className="text-center mt-1">
+                  {getProgressPercentage()}% Portfolio Explored
+                </div>
               </div>
               
-              {/* Speech Bubble Tail */}
-              <div className={`
-                absolute bottom-0 right-4 transform translate-y-full
-                w-0 h-0 border-l-[12px] border-l-transparent
-                border-r-[12px] border-r-transparent
-                border-t-[12px]
-              `} style={{ borderTopColor: avatarStyle.border.includes('blue') ? '#93c5fd' : 
-                                            avatarStyle.border.includes('purple') ? '#c084fc' :
-                                            avatarStyle.border.includes('pink') ? '#f9a8d4' : '#fde047' }} />
+              {/* Speech bubble tail */}
+              <div className="absolute bottom-0 right-6 transform translate-y-full">
+                <div className="w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-t-[12px] border-t-white/90" />
+              </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Avatar Container */}
+      {/* 🎨 Enhanced Avatar Container */}
       <motion.div
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onClick={handleAvatarClick}
+        className="relative cursor-pointer"
         animate={avatarState === 'idle' ? {
-          y: [0, -10, 0],
+          y: [0, -8, 0],
           rotate: [0, 2, -2, 0],
           scale: 1
         } : {
@@ -176,16 +250,16 @@ const Avatar = ({ mood = "helpful", messages = [] }) => {
           rotate: [0, 5, -5, 0]
         }}
         transition={{
-          duration: avatarState === 'idle' ? 3 : 0.6,
+          duration: avatarState === 'idle' ? 4 : 0.6,
           repeat: avatarState === 'idle' ? Infinity : 3,
           ease: "easeInOut"
         }}
-        className="relative cursor-pointer"
-        onClick={() => setShowDialogue(!showDialogue)}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
       >
-        {/* Level Badge */}
+        {/* Level badge */}
         <motion.div
-          className="absolute -top-2 -left-2 bg-yellow-400 text-black text-xs font-bold rounded-full w-8 h-8 flex items-center justify-center z-10 border-2 border-white"
+          className="absolute -top-2 -left-2 bg-accent text-dark text-xs font-bold rounded-full w-8 h-8 flex items-center justify-center z-10 border-2 border-white shadow-lg"
           animate={{ 
             scale: currentLevel > 10 ? [1, 1.2, 1] : 1,
             rotate: currentLevel > 15 ? [0, 360] : 0
@@ -199,58 +273,98 @@ const Avatar = ({ mood = "helpful", messages = [] }) => {
           {currentLevel}
         </motion.div>
 
-        {/* XP Ring */}
+        {/* XP Progress Ring */}
         <motion.div
-          className="absolute inset-0 rounded-full border-2 border-transparent"
+          className="absolute inset-0 rounded-full"
           style={{
-            background: `conic-gradient(from 0deg, rgba(59, 130, 246, 0.8) ${(totalXP % 1000) / 10}%, transparent ${(totalXP % 1000) / 10}%)`
+            background: `conic-gradient(from 0deg, ${appearance.gradient.includes('yellow') ? '#FFD166' : '#006D77'} ${((totalXP % 1000) / 1000) * 360}deg, transparent ${((totalXP % 1000) / 1000) * 360}deg)`
           }}
           animate={{ rotate: 360 }}
           transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
         />
 
-        {/* Main Avatar */}
+        {/* Main Avatar Circle */}
         <motion.div
-          className={`
-            w-16 h-16 rounded-full bg-gradient-to-br ${avatarStyle.bg}
-            border-4 ${avatarStyle.border} ${avatarStyle.glow} shadow-2xl
-            flex items-center justify-center text-2xl
-            backdrop-blur-sm relative overflow-hidden
-          `}
+          className={`w-20 h-20 rounded-full bg-gradient-to-br ${appearance.gradient} ${appearance.ring} ${appearance.glow} shadow-2xl flex items-center justify-center text-3xl backdrop-blur-sm relative overflow-hidden border-4 border-white/20`}
         >
           {/* Animated Background Pattern */}
           <motion.div
-            className="absolute inset-0 opacity-20"
+            className="absolute inset-0 opacity-30"
             animate={{
               background: [
-                'radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%)',
-                'radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.3) 0%, transparent 50%)',
-                'radial-gradient(circle at 40% 40%, rgba(119, 255, 198, 0.3) 0%, transparent 50%)'
+                'radial-gradient(circle at 20% 80%, rgba(255, 255, 255, 0.3) 0%, transparent 50%)',
+                'radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.2) 0%, transparent 50%)',
+                'radial-gradient(circle at 40% 40%, rgba(255, 255, 255, 0.4) 0%, transparent 50%)'
               ]
             }}
-            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
           />
           
-          {/* Avatar Icon */}
+          {/* Avatar Icon with animation */}
           <motion.span
             animate={{
-              scale: avatarState === 'talking' ? [1, 1.2, 1] : 1
+              scale: avatarState === 'talking' ? [1, 1.2, 1] : 1,
+              rotate: [0, 10, -10, 0]
             }}
-            transition={{ duration: 0.3 }}
+            transition={{ 
+              duration: avatarState === 'talking' ? 0.3 : 4,
+              repeat: avatarState === 'talking' ? 2 : Infinity
+            }}
+            className="relative z-10"
           >
-            {avatarStyle.icon}
+            {appearance.icon}
           </motion.span>
+
+          {/* Interaction hint */}
+          <motion.div
+            className="absolute inset-0 rounded-full border-2 border-white/50"
+            animate={{ scale: [1, 1.1, 1], opacity: [0.5, 0.8, 0.5] }}
+            transition={{ duration: 3, repeat: Infinity }}
+          />
         </motion.div>
 
-        {/* Progress Particles */}
-        {currentLevel > 5 && [...Array(3)].map((_, i) => (
+        {/* Mood indicator */}
+        <motion.div
+          className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-2 border-white shadow-lg flex items-center justify-center text-xs"
+          style={{
+            backgroundColor: mood === 'flirty' ? '#ff69b4' : mood === 'deep' ? '#6366f1' : '#22c55e'
+          }}
+          animate={{ 
+            scale: [1, 1.3, 1],
+            opacity: [0.7, 1, 0.7]
+          }}
+          transition={{ 
+            duration: 2, 
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+        >
+          {mood === 'flirty' ? '😏' : mood === 'deep' ? '🤔' : '😊'}
+        </motion.div>
+
+        {/* Minimize button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsMinimized(true);
+            setShowDialogue(false);
+          }}
+          className="absolute -top-1 -right-1 w-6 h-6 bg-subtleGray hover:bg-gray-500 text-white rounded-full flex items-center justify-center text-xs transition-colors opacity-0 group-hover:opacity-100"
+          aria-label="Minimize avatar"
+        >
+          −
+        </button>
+
+        {/* Progress particles for high levels */}
+        {currentLevel > 10 && [...Array(5)].map((_, i) => (
           <motion.div
             key={i}
-            className="absolute w-1 h-1 bg-yellow-400 rounded-full opacity-80"
+            className="absolute w-1 h-1 bg-accent rounded-full opacity-80"
             animate={{
-              y: [-20, -40, -20],
-              x: [0, Math.sin(i * 2) * 10, 0],
-              opacity: [0, 1, 0]
+              y: [-15, -30, -15],
+              x: [0, Math.sin(i * 2) * 15, 0],
+              opacity: [0, 1, 0],
+              scale: [0, 1, 0]
             }}
             transition={{
               duration: 3,
@@ -259,29 +373,12 @@ const Avatar = ({ mood = "helpful", messages = [] }) => {
               ease: "easeOut"
             }}
             style={{
-              left: `${20 + i * 20}%`,
-              top: '10%'
+              left: `${20 + i * 15}%`,
+              top: '15%'
             }}
           />
         ))}
       </motion.div>
-
-      {/* Mood Indicator */}
-      <motion.div
-        className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white shadow-lg"
-        style={{
-          backgroundColor: mood === 'flirty' ? '#ff69b4' : mood === 'deep' ? '#6366f1' : '#22c55e'
-        }}
-        animate={{ 
-          scale: [1, 1.3, 1],
-          opacity: [0.7, 1, 0.7]
-        }}
-        transition={{ 
-          duration: 2, 
-          repeat: Infinity,
-          ease: "easeInOut"
-        }}
-      />
     </div>
   );
 };

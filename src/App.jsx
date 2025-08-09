@@ -20,6 +20,7 @@ import Shaayari from './pages/Shaayari';
 import SecretCrush from './pages/SecretCrush';
 import InstagramUnlock from './pages/InstagramUnlock';
 import Contact from './pages/Contact';
+import HarryPotterFan from './pages/HarryPotter/HarryPotterFan';
 
 // Protected Route Component
 const ProtectedRoute = ({ children, zoneName }) => {
@@ -116,6 +117,12 @@ const AppContent = () => {
           <ProtectedRoute zoneName="contact">
             <Contact onPageLoad={() => handlePageLoad('contact')} />
           </ProtectedRoute>
+        } />
+
+          <Route path="/harry-potter" element={
+        
+            <HarryPotterFan  />
+        
         } />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

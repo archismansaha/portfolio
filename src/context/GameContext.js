@@ -1,5 +1,5 @@
 // src/context/GameContext.js
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 
 const GameContext = createContext();
@@ -35,54 +35,49 @@ export const GameProvider = ({ children }) => {
     consistency: 92
   });
 
-  // Calculate level based on XP
-  const calculateLevel = (xp) => {
-    return Math.floor(xp / 1000) + 1;
-  };
+  // 🎯 Track initialization to prevent loops
+  const isInitialized = useRef(false);
+  const pageVisitTimestamps = useRef({});
 
-  // Zone unlock requirements
+  // Calculate level based on XP
+  const calculateLevel = useCallback((xp) => {
+    return Math.floor(xp / 1000) + 1;
+  }, []);
+
+  // 🎯 Fixed zone requirements - reasonable for UX
   const zoneRequirements = {
     'home': { xp: 0, level: 1 },
-    'about': { xp: 100, level: 1 },
-    'experience': { xp: 250, level: 2 },
-    'skills': { xp: 500, level: 3 },
-    'projects': { xp: 750, level: 4 },
-    'gym': { xp: 1000, level: 5 },
-    'animeverse': { xp: 1250, level: 6 },
-    'shaayari': { xp: 1500, level: 7 },
-    'secretcrush': { xp: 2000, level: 8 },
-    'contact': { xp: 100, level: 1 }, // Always accessible
-    'instagramunlock': { xp: 3000, level: 10, special: 'instagramUnlocked' }
+    'about': { xp: 50, level: 1 },
+    'experience': { xp: 100, level: 2 },
+    'skills': { xp: 300, level: 3 },
+    'projects': { xp: 300, level: 4 },
+    'gym': { xp: 300, level: 3 },
+    'animeverse': { xp: 500, level: 3 },
+    'shaayari': { xp: 1200, level: 5 },
+    'secretcrush': { xp: 1500, level: 8 },
+    'contact': { xp: 50, level: 1 },
+    'instagramunlock': { xp: 2000, level: 10, special: 'instagramUnlocked' }
   };
 
-  // Add XP and check for level up
-  const addXP = (amount, source = 'general') => {
-    const newXP = totalXP + amount;
-    const newLevel = calculateLevel(newXP);
-    
-    setTotalXP(newXP);
-    
-    if (newLevel > currentLevel) {
-      setCurrentLevel(newLevel);
-      // Level up celebration could trigger here
-      console.log(`🎉 Level up! Now level ${newLevel}`);
-    }
-    
-    // Check for new zone unlocks
-    checkZoneUnlocks(newXP, newLevel);
-    
-    return { newXP, newLevel, leveledUp: newLevel > currentLevel };
-  };
-
-  // Check which zones should be unlocked
-  const checkZoneUnlocks = (xp, level) => {
+  // 🔓 Zone unlock checking - optimized
+  const checkZoneUnlocks = useCallback((xp, level) => {
     const newUnlocks = [];
     
     Object.entries(zoneRequirements).forEach(([zone, req]) => {
       if (!unlockedZones.includes(zone)) {
         const meetsXP = xp >= req.xp;
         const meetsLevel = level >= req.level;
-        const meetsSpecial = !req.special || eval(req.special); // Be careful with eval in production
+        
+        let meetsSpecial = true;
+        if (req.special) {
+          switch (req.special) {
+            case 'instagramUnlocked':
+              meetsSpecial = instagramUnlocked;
+              break;
+            default:
+              meetsSpecial = true;
+          }
+        }
         
         if (meetsXP && meetsLevel && meetsSpecial) {
           newUnlocks.push(zone);
@@ -91,62 +86,117 @@ export const GameProvider = ({ children }) => {
     });
     
     if (newUnlocks.length > 0) {
-      setUnlockedZones(prev => [...prev, ...newUnlocks]);
-      console.log(`🔓 New zones unlocked: ${newUnlocks.join(', ')}`);
+      setUnlockedZones(prev => {
+        const updated = [...prev, ...newUnlocks];
+        console.log(`🔓 New zones unlocked: ${newUnlocks.join(', ')}`);
+        return updated;
+      });
     }
-  };
+    return newUnlocks;
+  }, [unlockedZones, instagramUnlocked, setUnlockedZones]);
 
-  // Mark page as visited
-  const visitPage = (pageName) => {
-    if (!visitedPages.includes(pageName)) {
-      setVisitedPages(prev => [...prev, pageName]);
-      addXP(50, `visited_${pageName}`);
+  // 🎊 Fixed XP addition - prevents loops
+  const addXP = useCallback((amount, source = 'general') => {
+    console.log(`Adding ${amount} XP from ${source}`);
+    
+    setTotalXP(prevXP => {
+      const newXP = prevXP + amount;
+      const newLevel = calculateLevel(newXP);
+      
+      // Update level if needed
+      if (newLevel > currentLevel) {
+        console.log(`🎉 Level up! Now level ${newLevel}`);
+        setCurrentLevel(newLevel);
+        // Check for zone unlocks with small delay
+        setTimeout(() => checkZoneUnlocks(newXP, newLevel), 100);
+      }
+      
+      return newXP;
+    });
+  }, [calculateLevel, currentLevel, checkZoneUnlocks, setTotalXP, setCurrentLevel]);
+
+  // 🚫 FIXED: visitPage function to prevent continuous calls
+  const visitPage = useCallback((pageName) => {
+    const now = Date.now();
+    const lastVisit = pageVisitTimestamps.current[pageName] || 0;
+    const timeSinceLastVisit = now - lastVisit;
+    
+    // 🎯 Prevent spam - only award XP if more than 5 seconds since last visit
+    if (timeSinceLastVisit > 5000) {
+      pageVisitTimestamps.current[pageName] = now;
+      
+      if (!visitedPages.includes(pageName)) {
+        setVisitedPages(prev => [...prev, pageName]);
+        addXP(50, `visited_${pageName}`);
+        console.log(`First time visiting ${pageName} - awarded 50 XP`);
+      } else {
+        addXP(10, `revisited_${pageName}`);
+        console.log(`Revisited ${pageName} - awarded 10 XP`);
+      }
+    } else {
+      console.log(`Visit to ${pageName} ignored - too recent (${Math.round(timeSinceLastVisit/1000)}s ago)`);
     }
-  };
+  }, [visitedPages, addXP, setVisitedPages]);
 
   // Complete a puzzle
-  const completePuzzle = (puzzleId, xpReward = 100) => {
+  const completePuzzle = useCallback((puzzleId, xpReward = 100) => {
     if (!completedPuzzles.includes(puzzleId)) {
       setCompletedPuzzles(prev => [...prev, puzzleId]);
       addXP(xpReward, `puzzle_${puzzleId}`);
       return true;
     }
     return false;
-  };
+  }, [completedPuzzles, addXP, setCompletedPuzzles]);
 
   // Unlock a skill
-  const unlockSkill = (skillId, xpReward = 150) => {
+  const unlockSkill = useCallback((skillId, xpReward = 150) => {
     if (!unlockedSkills.includes(skillId)) {
       setUnlockedSkills(prev => [...prev, skillId]);
       addXP(xpReward, `skill_${skillId}`);
       return true;
     }
     return false;
-  };
+  }, [unlockedSkills, addXP, setUnlockedSkills]);
 
   // Unlock anime
-  const unlockAnime = (animeId, xpReward = 200) => {
+  const unlockAnime = useCallback((animeId, xpReward = 200) => {
     if (!unlockedAnime.includes(animeId)) {
       setUnlockedAnime(prev => [...prev, animeId]);
       addXP(xpReward, `anime_${animeId}`);
       return true;
     }
     return false;
-  };
+  }, [unlockedAnime, addXP, setUnlockedAnime]);
 
   // Check if zone is unlocked
-  const isZoneUnlocked = (zoneName) => {
+  const isZoneUnlocked = useCallback((zoneName) => {
     return unlockedZones.includes(zoneName);
-  };
+  }, [unlockedZones]);
 
   // Get progress percentage
-  const getProgressPercentage = () => {
+  const getProgressPercentage = useCallback(() => {
     const totalZones = Object.keys(zoneRequirements).length;
     return Math.round((unlockedZones.length / totalZones) * 100);
-  };
+  }, [unlockedZones]);
 
-  // Reset all progress (for testing/debugging)
-  const resetProgress = () => {
+  // Get next unlock requirement
+  const getNextUnlockRequirement = useCallback(() => {
+    const lockedZones = Object.entries(zoneRequirements).filter(
+      ([zone]) => !unlockedZones.includes(zone)
+    );
+    
+    if (lockedZones.length === 0) return null;
+    
+    return lockedZones.reduce((next, [zone, req]) => {
+      if (!next || req.xp < next.xp) {
+        return { zone, ...req };
+      }
+      return next;
+    }, null);
+  }, [unlockedZones]);
+
+  // Reset all progress
+  const resetProgress = useCallback(() => {
     setTotalXP(0);
     setCurrentLevel(1);
     setUnlockedZones(['home']);
@@ -156,13 +206,35 @@ export const GameProvider = ({ children }) => {
     setUnlockedAnime([]);
     setInstagramUnlocked(false);
     setCrushAffection(0);
+    setGymStats({ strength: 85, endurance: 78, consistency: 92 });
+    pageVisitTimestamps.current = {};
     console.log('🔄 All progress reset!');
-  };
+  }, [
+    setTotalXP, setCurrentLevel, setUnlockedZones, setVisitedPages,
+    setUnlockedSkills, setCompletedPuzzles, setUnlockedAnime,
+    setInstagramUnlocked, setCrushAffection, setGymStats
+  ]);
 
-  // Initialize zones on first load
+  // 🎯 FIXED: Initialize zones only once
   useEffect(() => {
-    checkZoneUnlocks(totalXP, currentLevel);
-  }, []);
+    if (!isInitialized.current) {
+      console.log('GameContext: Initial zone unlock check');
+      checkZoneUnlocks(totalXP, currentLevel);
+      isInitialized.current = true;
+    }
+  }, []); // Empty dependency array - runs only once
+
+  // 🎯 FIXED: Auto-unlock basic zones without loops
+  useEffect(() => {
+    if (totalXP >= 50 && !unlockedZones.includes('about')) {
+      console.log('Auto-unlocking About zone');
+      setUnlockedZones(prev => [...prev, 'about']);
+    }
+    if (totalXP >= 50 && !unlockedZones.includes('contact')) {
+      console.log('Auto-unlocking Contact zone');
+      setUnlockedZones(prev => [...prev, 'contact']);
+    }
+  }, [totalXP]); // Only depends on totalXP
 
   const value = {
     // State
@@ -185,6 +257,7 @@ export const GameProvider = ({ children }) => {
     unlockAnime,
     isZoneUnlocked,
     getProgressPercentage,
+    getNextUnlockRequirement,
     resetProgress,
     
     // Setters for direct manipulation
@@ -195,8 +268,9 @@ export const GameProvider = ({ children }) => {
     setCrushAffection,
     setGymStats,
     
-    // Requirements
-    zoneRequirements
+    // Requirements & Utils
+    zoneRequirements,
+    calculateLevel
   };
 
   return (
